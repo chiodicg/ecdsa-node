@@ -1,7 +1,10 @@
 import { useState } from "react";
 import server from "./server";
+import { secp256k1 } from "ethereum-cryptography/secp256k1";
+import { keccak256 } from "ethereum-cryptography/keccak";
+import { toHex } from "ethereum-cryptography/utils";
 
-function Transfer({ address, setBalance }) {
+function Transfer({ privateKey, address, setBalance }) {
   const [sendAmount, setSendAmount] = useState("");
   const [recipient, setRecipient] = useState("");
 
@@ -10,14 +13,36 @@ function Transfer({ address, setBalance }) {
   async function transfer(evt) {
     evt.preventDefault();
 
+    console.log(sendAmount);
+    const message = {
+      amount: parseInt(sendAmount),
+      recipient: recipient,
+    };
+    const hashedMessage = keccak256(Uint8Array.from(message));
+    const signature = secp256k1.sign(hashedMessage, privateKey);
+    const fullSignature = new Uint8Array(signature);
+    const signatureString = toHex(fullSignature);
+    console.log(signatureString);
+    const transaction = {
+      message: message,
+      hash: hashedMessage,
+      signature: signature,
+    };
+
+    // FInd out how to pass the Signature in the request
+    /* It complains cannot stringify BigInt, but the Signature format is actually:
+     {r: 108222167931602429053831018373168748927247248315544432854601564291486681784611n
+s: 27833371414618603414443786723576292965454020445861752538752665091823005314634n
+recovery: 1}
+
+
+*/
     try {
       const {
         data: { balance },
-      } = await server.post(`send`, {
-        sender: address,
-        amount: parseInt(sendAmount),
-        recipient,
-      });
+      } = await server.post(`send`, transaction);
+      console.log(balance);
+
       setBalance(balance);
     } catch (ex) {
       alert(ex.response.data.message);
@@ -40,7 +65,7 @@ function Transfer({ address, setBalance }) {
       <label>
         Recipient
         <input
-          placeholder="Type an address, for example: 0x2"
+          placeholder="Type an address (public key)"
           value={recipient}
           onChange={setValue(setRecipient)}
         ></input>
